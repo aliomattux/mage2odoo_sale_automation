@@ -1,0 +1,29 @@
+<openerp>
+    <data>
+
+        <record id="view_payment_method_automation_tree" model="ir.ui.view">
+            <field name="name">Payment Method Automation Tree</field>
+            <field name="model">payment.method</field>
+	    <field name="inherit_id" ref="payment_method.view_payment_method_tree" />
+            <field name="arch" type="xml">
+		<field name="journal" position="after">
+		    <field name="automatic_payment" />
+		</field>
+            </field>
+        </record>
+
+        <record id="view_payment_method_automation_form" model="ir.ui.view">
+            <field name="name">Payment Method Automation Form</field>
+            <field name="model">payment.method</field>
+	    <field name="inherit_id" ref="payment_method.view_payment_method_form" />
+            <field name="arch" type="xml">
+		<group string="Payment Journal" position="after" >
+		    <group string="Automation" >
+			<field name="automatic_payment" />
+		    </group>
+		</group>
+            </field>
+        </record>
+
+    </data>
+</openerp>
