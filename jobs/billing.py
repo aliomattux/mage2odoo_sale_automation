@@ -1,41 +1,66 @@
-#This module, although written from scrach and is a different implementation than sale_automatic_workflow,
-#was inspired by it
-
 from openerp.osv import osv, fields
-#from pprint import pprint as pp
+from pprint import pprint as pp
+
 
 
 class MageIntegrator(osv.osv):
     _inherit = 'mage.integrator'
 
-    def prepare_search_domain(self):
-	return [('state', '=', 'draft'),
-		('payment_method.automatic_payment', '=', True)
-	]
+    def prepare_billing_search_domain(self):
+	#TODO Check to make sure invoiced doesnt mean just invoiced, not paid
+	#Do not process any order that is invoiced from picking
+	#This is handled in the core mage2odoo module. See sale vals payment defaults
+        return [('mage_invoice_complete', '=', True),
+                ('invoiced', '=', False),
+		('state', '!=', 'cancel'),
+		('order_policy', '!=', 'picking'),
+		('payment_method', '!=', False),
+        ]
 
 
     def autopay_sale_orders(self, cr, uid, ids, context=None):
 	context = {}
-
 	sale_obj = self.pool.get('sale.order')
-	invoice_obj = self.pool.get('account.invoice')
-	voucher_obj = self.pool.get('account.voucher')
-	search_domain = self.prepare_search_domain()
+	search_domain = self.prepare_billing_search_domain()
 	sale_ids = sale_obj.search(cr, uid, search_domain, limit=100)
 	if not sale_ids:
 	    return True
 
-	for sale in sale_obj.browse(cr, uid, sale_ids):
-	    sale.action_button_confirm()
+	return self.process_sale_orders(cr, uid, sale_ids, False)
 
+
+    def process_sale_orders(self, cr, uid, sale_ids, back_date, context=None):
+	sale_obj = self.pool.get('sale.order')
+	invoice_obj = self.pool.get('account.invoice')
+	picking_obj = self.pool.get('stock.picking')
+	voucher_obj = self.pool.get('account.voucher')
+
+	for sale in sale_obj.browse(cr, uid, sale_ids):
+	    #We can't process a payment without a payment journal
+	    if not sale.payment_method.journal:
+		continue
+
+	    backdate = sale.date_order
+
+	    if sale.state == 'draft':
+	        sale.action_button_confirm()
+
+	    #If the invoice must be manually created
+	    if sale.order_policy == 'manual' and not sale.invoice_ids:
+		sale_obj.action_invoice_create(cr, uid, [sale.id], date_invoice=backdate)
+
+	    #TODO: This could cause performance problems
 	    for invoice in sale.invoice_ids:
-		if invoice.state not in ['confirm', 'draft']:
+
+		#TODO: Implement state filter
+		if invoice.state != 'draft':
 		    continue
 
-		if invoice.state == 'draft':
-		    invoice.signal_workflow('invoice_open')
+		invoice.date_invoice = backdate
+		invoice.due_date = backdate
+		invoice.signal_workflow('invoice_open')
 
-		voucher = self.prepare_voucher_vals(cr, uid, invoice, sale.payment_method, context=context)
+		voucher = self.prepare_voucher_vals(cr, uid, invoice, backdate, sale.payment_method, context=context)
 		voucher_obj.button_proforma_voucher(cr, uid, [voucher.id])
 		#This is called by passing variables into context automatically. Left here as reference
 #		invoice.signal_workflow('reconciled')
@@ -43,7 +68,7 @@ class MageIntegrator(osv.osv):
 	return True
 
 
-    def prepare_voucher_vals(self, cr, uid, invoice, payment_method, context=None):
+    def prepare_voucher_vals(self, cr, uid, invoice, backdate, payment_method, context=None):
 	voucher_obj = self.pool.get('account.voucher')
 	journal_id = payment_method.journal.id
 
@@ -66,6 +91,12 @@ class MageIntegrator(osv.osv):
 		'company_id': invoice.company_id.id,
 
 	}
+
+	if backdate:
+	    vals.update({
+		'date': backdate,
+		'create_date': backdate,
+	    })
 
 	#In the UI all vals are loaded into context. Add them into context in case they are retrieved from functions
 	context.update(vals)
@@ -104,8 +135,14 @@ class MageIntegrator(osv.osv):
 
 	#solves bug where onchange returns out_invoice
 	vals['type'] = 'receipt'
+	#TODO: See if this is necessary
+        if backdate:
+            vals.update({
+                'date': backdate,
+                'create_date': backdate,
+            })
 
-	voucher_id = voucher_obj.create(cr, uid, vals)
+	voucher_id = voucher_obj.create(cr, uid, vals, context=context)
 	voucher = voucher_obj.browse(cr, uid, voucher_id)
 
 	return voucher
