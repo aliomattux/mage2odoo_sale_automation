@@ -1,8 +1,6 @@
 from openerp.osv import osv, fields
 from pprint import pprint as pp
 
-
-
 class MageIntegrator(osv.osv):
     _inherit = 'mage.integrator'
 
@@ -14,7 +12,7 @@ class MageIntegrator(osv.osv):
                 ('invoiced', '=', False),
 		('state', '!=', 'cancel'),
 		('order_policy', '!=', 'picking'),
-		('payment_method', '!=', False),
+		('payment_method.journal', '!=', False),
         ]
 
 
@@ -22,7 +20,7 @@ class MageIntegrator(osv.osv):
 	context = {}
 	sale_obj = self.pool.get('sale.order')
 	search_domain = self.prepare_billing_search_domain()
-	sale_ids = sale_obj.search(cr, uid, search_domain, limit=100)
+	sale_ids = sale_obj.search(cr, uid, search_domain, limit=6000)
 	if not sale_ids:
 	    return True
 
@@ -34,7 +32,6 @@ class MageIntegrator(osv.osv):
 	invoice_obj = self.pool.get('account.invoice')
 	picking_obj = self.pool.get('stock.picking')
 	voucher_obj = self.pool.get('account.voucher')
-
 	for sale in sale_obj.browse(cr, uid, sale_ids):
 	    #We can't process a payment without a payment journal
 	    if not sale.payment_method.journal:
@@ -54,6 +51,7 @@ class MageIntegrator(osv.osv):
 
 		#TODO: Implement state filter
 		if invoice.state != 'draft':
+		    'Skipping'
 		    continue
 
 		invoice.date_invoice = backdate
@@ -64,6 +62,7 @@ class MageIntegrator(osv.osv):
 		voucher_obj.button_proforma_voucher(cr, uid, [voucher.id])
 		#This is called by passing variables into context automatically. Left here as reference
 #		invoice.signal_workflow('reconciled')
+	    cr.commit()
 
 	return True
 

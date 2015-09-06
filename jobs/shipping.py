@@ -28,7 +28,7 @@ class MageIntegrator(osv.osv):
         move_obj = self.pool.get('stock_move')
         search_domain = self.prepare_shipping_search_domain()
 	#Limit the amount of records to process in case of performance
-        sale_ids = sale_obj.search(cr, uid, search_domain, limit=5)
+        sale_ids = sale_obj.search(cr, uid, search_domain)
         if not sale_ids:
             return True
 
@@ -51,7 +51,7 @@ class MageIntegrator(osv.osv):
 		continue
 
 	    if not sale.picking_ids:
-		break
+		pass
 		#TODO: Add functionality to create picking if necessary
 
 	    #Search for pickings not done as there many be many
@@ -62,6 +62,14 @@ class MageIntegrator(osv.osv):
 	    self.process_pickings(cr, uid, picking_ids, backdate=backdate)
 
 
+    def automate_only_pickings(self, cr, uid, ids, context=None):
+	picking_obj = self.pool.get('stock.picking')
+	picking_ids = picking_obj.search(cr, uid, [\
+		('state', 'in', ['waiting', 'confirmed', 'partially_available', 'assigned']),
+		('picking_type_id.code', '=', 'outgoing'),
+	])
+	return self.process_pickings(cr, uid, picking_ids)
+
     def process_pickings(self, cr, uid, picking_ids, backdate=False):
 	picking_obj = self.pool.get('stock.picking')
 	for picking in picking_obj.browse(cr, uid, picking_ids):
@@ -69,6 +77,7 @@ class MageIntegrator(osv.osv):
 		picking_obj.force_assign(cr, uid, [picking.id])
 
 	    picking.do_transfer()
+#	    backdate = picking.sale.date_order
 
 	    if backdate:
 		picking.date = backdate
