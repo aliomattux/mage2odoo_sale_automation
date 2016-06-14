@@ -132,6 +132,14 @@ class MageIntegrator(osv.osv):
                 else:
                     vals[k] = v
 
+                if k == 'line_dr_ids':
+                    dr_values = []
+                    for each in v:
+                        dr_values.append([0, False, each])
+                    vals[k] = dr_values
+                else:
+                    vals[k] = v
+
 	#solves bug where onchange returns out_invoice
 	vals['type'] = 'receipt'
 	#TODO: See if this is necessary
@@ -141,8 +149,28 @@ class MageIntegrator(osv.osv):
                 'create_date': backdate,
             })
 
+        for k, v in vals.items():
+            if k == 'line_cr_ids':
+                values = []
+                for each in v:
+                    values.append([0, False, each])
+                vals[k] = values
+		continue
+            else:
+                vals[k] = v
+		continue
+            if k == 'line_dr_ids':
+                dr_values = []
+                for each in v:
+                    dr_values.append([0, False, each])
+                vals[k] = dr_values
+		continue
+            else:
+                vals[k] = v
+		continue
+	pp(vals)
+
 	voucher_id = voucher_obj.create(cr, uid, vals, context=context)
 	voucher = voucher_obj.browse(cr, uid, voucher_id)
 
 	return voucher
-
